@@ -8,7 +8,9 @@ def client():
     with app.test_client() as client:
         yield client
 
-def test_post_movimentacao_mock(client):
+@patch("app.criar_objeto_movimentacao")
+@patch("app.calcular_valor", return_value=(999.99, None))
+def test_post_movimentacao_mock(mock_calcular, mock_criar, client):
     movimentacoes.clear()
     payload = {
         "cpf_comprador": "111",
@@ -17,24 +19,22 @@ def test_post_movimentacao_mock(client):
         "quantidade": 10
     }
 
-    # Mock das funções do app_service
-    with patch("app.calcular_valor", return_value=(999.99, None)), \
-         patch("app.criar_objeto_movimentacao") as mock_criar:
+    # Configuração do mock de criar_objeto_movimentacao
+    mock_criar.side_effect = lambda data, valor: {
+        "cpf_comprador": data["cpf_comprador"],
+        "cpf_vendedor": data["cpf_vendedor"],
+        "ticker": data["ticker"],
+        "quantidade": data["quantidade"],
+        "valor_movimentacao": valor
+    }
 
-        mock_criar.side_effect = lambda data, valor: {
-            "cpf_comprador": data["cpf_comprador"],
-            "cpf_vendedor": data["cpf_vendedor"],
-            "ticker": data["ticker"],
-            "quantidade": data["quantidade"],
-            "valor_movimentacao": valor
-        }
-
-        response = client.post("/movimentacoes", json=payload)
+    response = client.post("/movimentacoes", json=payload)
 
     assert response.status_code == 201
     data = response.get_json()
     assert data["valor_movimentacao"] == 999.99
     assert data["ticker"] == "PETR4"
+
 
 def test_get_movimentacoes(client):
     movimentacoes.clear()
